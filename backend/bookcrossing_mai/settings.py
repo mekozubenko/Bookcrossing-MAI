@@ -12,6 +12,10 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 
+import os
+
+from django.contrib.sessions import middleware
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -25,8 +29,10 @@ SECRET_KEY = 'django-insecure-_$mfjy=p7^^_y$z^fh+pjl+#*2=zv&9*vibmutz%z5)ont(+gd
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = [
+    'dweeb-silk-liable.ngrok-free.dev',
+    '127.0.0.1',
+]
 
 # Application definition
 
@@ -39,20 +45,23 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'django_otp',
+    'django_otp.plugins.otp_totp',
     'drf_spectacular',
 ]
 
 REST_FRAMEWORK = {
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',  # Схема для автоматической генерации API-документации
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-# Настройки для drf-spectacular
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Listings API',                               # Название API
-    'DESCRIPTION': 'API для формирования заявок.',  # Описание API
-    'VERSION': '1.0.0',                                           # Версия API
-    'SERVE_INCLUDE_SCHEMA': False,                                # Отключение схемы в ответах API
+    'TITLE': 'Listings API',
+    'DESCRIPTION': 'API для формирования заявок.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
+
+CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -60,11 +69,17 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django_otp.middleware.OTPMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
 ROOT_URLCONF = 'bookcrossing_mai.urls'
+
+NOTIFICORE_API_KEY = 'test_mqI7snPZXhLmtoB0Q1ZM'
+
+NOTIFICORE_SENDER = 'vsevoloddd47954'
+
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '9025032421:AAHaPfyRodEolKWu4s0VZ4PpKq32HhPj8G4')
 
 TEMPLATES = [
     {
