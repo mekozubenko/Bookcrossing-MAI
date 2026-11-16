@@ -1,0 +1,94 @@
+# ==========================================
+# Dependencies
+# ==========================================
+
+node_modules/
+.pnpm-store/
+
+# ==========================================
+# Frontend build and cache
+# ==========================================
+
+dist/
+dist-ssr/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# ==========================================
+# Environment variables and secrets
+# ==========================================
+
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+*.pem
+*.key
+
+# ==========================================
+# Logs
+# ==========================================
+
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==========================================
+# IDE and editors
+# ==========================================
+
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+*.iml
+*.swp
+*.swo
+*~
+
+# ==========================================
+# Operating system files
+# ==========================================
+
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ==========================================
+# Python / Django
+# ==========================================
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.venv/
+venv/
+env/
+
+*.egg-info/
+
+# ==========================================
+# Local databases and user uploads
+# ==========================================
+
+db.sqlite3
+db.sqlite3-journal
+
+media/
+uploads/
+
+# ==========================================
+# Temporary files
+# ==========================================
+
+tmp/
+temp/
+*.tmp
