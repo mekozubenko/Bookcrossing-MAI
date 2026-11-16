@@ -3,8 +3,9 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework import viewsets, status
 
-from .models import Listing
 from .serializers import ListingSerializer
+
+from .models import Listing
 
 class ListingViewSet(viewsets.ModelViewSet):
     queryset = Listing.objects.all()
@@ -18,6 +19,15 @@ class ListingViewSet(viewsets.ModelViewSet):
         return Response({
             'listing_id': listing.id,
             'contact_value': listing.contact_value,
+        })
+
+    @action(detail=True, methods=['get'], url_path='location')
+    def get_location(self, request, pk=None):
+        listing = get_object_or_404(Listing, pk=pk)
+
+        return Response({
+            'listing_id': listing.id,
+            'location': listing.location,
         })
 
     def create(self, request, *args, **kwargs):

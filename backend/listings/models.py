@@ -1,6 +1,5 @@
 from django.db import models
 from django.utils import timezone
-import uuid
 
 class Listing(models.Model):
 
@@ -44,7 +43,7 @@ class Listing(models.Model):
     author = models.CharField(max_length=200, default='Unknown')
     genre = models.CharField(max_length=200, choices=Genre.choices, default=Genre.UNKNOWN)
     summary = models.TextField()
-    contact_value = models.CharField(max_length=100, default='Unknown')
+    contact_value = models.CharField(max_length=100, blank=False, null=False)
     contact_type = models.CharField(max_length=20, choices=ContactType.choices, default=ContactType.PHONE_NUMBER)
     photo_url = models.URLField(null=True, blank=True)
     location = models.CharField(max_length=200, default='Unknown')
