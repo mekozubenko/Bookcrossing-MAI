@@ -1,8 +1,6 @@
 from rest_framework import viewsets
 
 from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import render, redirect
-from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
 from django.conf import settings
@@ -11,24 +9,40 @@ from .models import User, TelegramVerification
 from .serializers import UserRegisterSerializer, UserGetSerializer
 
 from rest_framework.generics import CreateAPIView
+from rest_framework.decorators import action
+from rest_framework import status
 
-from .sms import send_otp_sms
+from datetime import timedelta
+
+from .sms import send_otp_sms, verify_otp_sms
 
 import logging
 import time
 import json
 import requests
 
-@csrf_exempt
-def telegram_verification_start(request):
+def cleanup_unverified_users():
+    deadline = timezone.now() - timedelta(hours=24)
 
-    raw_token, obj = TelegramVerification.create_token()
+    User.objects.filter(
+        status=User.Status.PENDING,
+        created_at__lt=deadline
+    ).delete()
+
+@csrf_exempt
+def telegram_verification_start(request, user):
+
+    raw_token, obj = TelegramVerification.create_token(user)
+
     bot_username = 'BookcrossingMAI_bot'
-    bot_url = f"https://t.me/{bot_username}?start={raw_token}"
+    bot_url = f'https://t.me/{bot_username}?start={raw_token}'
 
     return JsonResponse({
+        'success': True,
+        'message': 'Подтвердите аккаунт через Telegram',
+        'verification_type': 'telegram',
         'verification_id': obj.id,
-        'bot_url': bot_url
+        'bot_url': bot_url,
     })
 
 
@@ -46,14 +60,13 @@ def send_telegram_message(chat_id, text):
     except requests.exceptions.RequestException:
         logger.exception("Failed to send Telegram message")
 
+
 @csrf_exempt
 def telegram_webhook(request):
-    print(">>> BODY RAW:", request.body)
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=405)
 
     if not request.body:
-        logger.warning("Telegram webhook received empty body")
         return JsonResponse({'ok': True})
 
     try:
@@ -61,30 +74,39 @@ def telegram_webhook(request):
         message = update.get('message', {})
         text = message.get('text', '')
 
-        logger.info("Update received: %s", update)
+        if not text.startswith('/start '):
+            return JsonResponse({'ok': True})
 
-        if text.startswith('/start '):
-            raw_token = text.split(' ', 1)[1].strip()
-            verification = TelegramVerification.verify_token(raw_token)
+        raw_token = text.split(' ', 1)[1].strip()
 
-            print(verification)
+        verification = TelegramVerification.verify_token(raw_token)
 
-            if verification:
-                from_user = message.get('from', {})
-                verification.telegram_user_id = from_user.get('id')
-                verification.telegram_username = from_user.get('username')
-                verification.status = TelegramVerification.Status.VERIFIED
-                verification.verified_at = timezone.now()
+        if not verification or not verification.user:
+            return JsonResponse({'ok': True})
 
-                # Переставить ниже и посмотреть чё произойдёт
-                send_telegram_message(verification.telegram_user_id,"Telegram подтверждён! Вернитесь на сайт.")
+        from_user = message.get('from', {})
+        telegram_user_id = from_user.get('id')
 
-                verification.save()
+        if not telegram_user_id:
+            return JsonResponse({'ok': True})
 
-            else:
-                pass
+        verification.telegram_user_id = telegram_user_id
+        verification.telegram_username = from_user.get('username')
+        verification.status = TelegramVerification.Status.VERIFIED
+        verification.verified_at = timezone.now()
+        verification.save()
+
+        user = verification.user
+        user.status = User.Status.VERIFIED
+        user.save(update_fields=['status'])
+
+        send_telegram_message(
+            telegram_user_id,
+            'Telegram подтверждён! Ваш аккаунт успешно зарегистрирован. Вернитесь на сайт.'
+        )
+
     except Exception:
-        logger.exception("Telegram webhook processing failed")
+        logger.exception('Telegram webhook processing failed')
 
     return JsonResponse({'ok': True})
 
@@ -96,72 +118,97 @@ def telegram_verification_status(request, verification_id):
     except TelegramVerification.DoesNotExist:
         return JsonResponse({'error': 'not found'}, status=404)
 
-def check_phone(request):
-    if request.method == 'POST':
-        action = request.POST.get('action')
-        phone = request.POST.get('phone', '').strip()
+def start_check_phone(request, user):
+    phone = user.contact_value
 
-        if action == 'send_code':
-            if not phone:
-                messages.error(request, "Пожалуйста, введите номер телефона")
-                #return render(request, 'submit_form.html')
+    verification_id = send_otp_sms(phone)
 
-            # Перечекать!!!
-            last_sent = request.session.get('otp_last_sent', 0)
-            if time.time() - last_sent < 60:
-                messages.error(request, "Слишком частая отправка, попробуйте позже")
-                #return render(request, 'submit_form.html', {'phone': phone})
+    if not verification_id:
+        return JsonResponse({
+            'status': False,
+            'error': 'Не удалось отправить SMS'
+        }, status=400)
 
-            otp_code = send_otp_sms(phone)
-            if otp_code:
-                request.session['otp_code'] = otp_code
-                request.session['otp_phone'] = phone
-                request.session['otp_timestamp'] = time.time()
-                request.session['otp_last_sent'] = time.time()
-                messages.success(request, "Код подтверждения отправлен")
-            else:
-                messages.error(request, "Не удалось отправить, попробуйте позже")
-            # return render(request, 'submit_form.html', {'phone': phone})
+    request.session['verification_id'] = verification_id
+    request.session['otp_phone'] = phone
+    request.session['otp_timestamp'] = time.time()
+    request.session['otp_last_sent'] = time.time()
 
-
-        elif action == 'submit':
-            user_code = request.POST.get('code', '').strip()
-            saved_code = request.session.get('otp_code')
-            saved_phone = request.session.get('otp_phone')
-            saved_time = request.session.get('otp_timestamp', 0)
-
-            # Перечекать!!!
-            if phone != saved_phone:
-                messages.error(request, "Номер телефона не совпадает")
-            elif not saved_code or user_code != saved_code:
-                messages.error(request, "Неверный код подтверждения")
-            elif time.time() - saved_time > 300:
-                messages.error(request, "Код истёк, запросите новый")
-
-            else:
-
-                User.objects.create(
-                    login=request.POST.get('login'),
-                    password=request.POST.get('password'),
-                    contact_value=phone,
-                    contact_type='phone_number',
-                    status='verified'
-                )
-
-                for key in ['otp_code', 'otp_phone', 'otp_timestamp']:
-                    request.session.pop(key, None)
-                messages.success(request, "Заявка успешно отправлена!")
-                #return redirect('submit_listing')
-
-    #return render(request, 'submit_form.html')
+    return JsonResponse({
+        'status': True,
+        'message': 'Код подтверждения отправлен',
+        'verification_type': 'phone',
+        'contact_value': phone,
+        'user': user.id,
+        'verification_id': verification_id
+    })
 
 class RegisterView(CreateAPIView):
 
     queryset = User.objects.all()
     serializer_class = UserRegisterSerializer
 
+    def create(self, request, *args, **kwargs):
+
+        cleanup_unverified_users()
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.save()
+
+        if user.contact_type == User.ContactType.PHONE_NUMBER:
+
+            result = start_check_phone(request, user)
+
+            return result
+
+        elif user.contact_type == User.ContactType.TELEGRAM:
+
+            result = telegram_verification_start(request, user)
+
+            return result
+
+        return JsonResponse(
+            {'error': 'Неизвестный тип контакта'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserGetSerializer
+
+    @action(detail=False, methods=['post'], url_path='verify-phone')
+    def verify_phone(self, request):
+        user_id = request.data.get('user')
+        user = User.objects.get(id=user_id)
+        print(user, user.status)
+        verification_id = request.data.get('verification_id')
+        code = request.data.get('code')
+
+        if not verification_id or not code:
+            return JsonResponse(
+                {'error': 'Необходимо передать ID проверки и код'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        result = verify_otp_sms(verification_id, code)
+
+        print(result)
+
+        if result == 'verified':
+            user.status = User.Status.VERIFIED
+            user.save(update_fields=['status'])
+            return JsonResponse(
+                {'verified': True, 'message': 'Телефон подтверждён'},
+                status=status.HTTP_200_OK
+            )
+
+        return JsonResponse(
+            {'verified': False, 'message': 'Неверный код'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 # Create your views here.

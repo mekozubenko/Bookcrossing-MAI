@@ -18,10 +18,10 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        return User.objects.create_user(**validated_data)
+        return User.objects.create_user(**validated_data, status=User.Status.PENDING)
 
 class UserGetSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'login', 'contact_value', 'contact_type', 'created_at']
+        fields = ['id', 'login', 'contact_value', 'contact_type', 'status', 'created_at']

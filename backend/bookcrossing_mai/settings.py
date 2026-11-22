@@ -78,9 +78,11 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'bookcrossing_mai.urls'
 
-NOTIFICORE_API_KEY = 'test_mqI7snPZXhLmtoB0Q1ZM'
+NOTIFICORE_API_KEY = 'test_AeF23GF5wxXYMo8MHvzp'
 
-NOTIFICORE_SENDER = 'vsevoloddd47954'
+NOTIFICORE_SENDER = '12131'
+
+NOTIFICORE_TEMPLATE_ID =  485
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '9025032421:AAHaPfyRodEolKWu4s0VZ4PpKq32HhPj8G4')
 
@@ -138,6 +140,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 AUTH_USER_MODEL = 'users.User'
 
+LOGIN_REDIRECT_URL = '/listings/api/'
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/

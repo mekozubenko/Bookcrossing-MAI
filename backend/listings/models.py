@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.conf import settings
 
 class Listing(models.Model):
 
@@ -39,6 +40,7 @@ class Listing(models.Model):
         PHONE_NUMBER = 'phone_number'
         TELEGRAM = 'telegram'
 
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='listings', blank=False, null=False)
     title = models.CharField(max_length=200)
     author = models.CharField(max_length=200, default='Unknown')
     genre = models.CharField(max_length=200, choices=Genre.choices, default=Genre.UNKNOWN)

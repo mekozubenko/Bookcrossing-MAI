@@ -1,3 +1,5 @@
+from rest_framework.fields import CharField
+
 from django.contrib.auth.models import PermissionsMixin
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
@@ -8,46 +10,6 @@ import hashlib
 import secrets
 from datetime import timedelta
 from django.utils import timezone
-
-class TelegramVerification(models.Model):
-
-    class Status(models.TextChoices):
-        PENDING = 'pending'
-        VERIFIED = 'verified'
-
-    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    telegram_user_id = models.BigIntegerField(null=True, blank=True)
-    telegram_username = models.CharField(max_length=255, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-    verified_at = models.DateTimeField(null=True, blank=True)
-
-    @classmethod
-    def create_token(cls):
-        """Генерирует одноразовый токен, сохраняет хеш, возвращает исходный токен"""
-        raw_token = secrets.token_urlsafe(32)
-        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-        obj = cls.objects.create(
-            token_hash=token_hash,
-            expires_at=timezone.now() + timedelta(minutes=15)
-        )
-        return raw_token, obj
-
-    @classmethod
-    def verify_token(cls, raw_token):
-        """Проверяет токен, возвращает объект или None"""
-        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-        try:
-            obj = cls.objects.get(
-                token_hash=token_hash,
-                status=cls.Status.PENDING,
-                expires_at__gt=timezone.now()
-            )
-            return obj
-        except cls.DoesNotExist:
-            return None
-
 
 class UserManager(BaseUserManager):
 
@@ -98,5 +60,59 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.login
+
+
+class PhoneVerification(models.Model):
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='phone_verifications', null=True, blank=True)
+
+    code_hash = models.CharField(max_length=64, blank=False, null=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    attempts = models.IntegerField(default=0)
+    is_verified = models.BooleanField(default=False)
+
+
+class TelegramVerification(models.Model):
+
+
+    class Status(models.TextChoices):
+        PENDING = 'pending'
+        VERIFIED = 'verified'
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='telegram_verifications', null=True, blank=True)
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    telegram_user_id = models.BigIntegerField(null=True, blank=True)
+    telegram_username = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    @classmethod
+    def create_token(cls, user):
+        """Генерирует одноразовый токен, сохраняет хеш, возвращает исходный токен"""
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        obj = cls.objects.create(
+            user=user,
+            token_hash=token_hash,
+            expires_at=timezone.now() + timedelta(minutes=15)
+        )
+        return raw_token, obj
+
+    @classmethod
+    def verify_token(cls, raw_token):
+        """Проверяет токен, возвращает объект или None"""
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        try:
+            obj = cls.objects.get(
+                token_hash=token_hash,
+                status=cls.Status.PENDING,
+                expires_at__gt=timezone.now()
+            )
+            return obj
+        except cls.DoesNotExist:
+            return None
 
 
